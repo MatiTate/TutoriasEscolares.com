@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tutorías Escolares</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 10px 0;
+            text-align: center;
+        }
+        .container {
+            width: 80%;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #333;
+        }
+        h1 {
+            color: #ff9800;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            margin-bottom: 15px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #e68900;
+        }
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px 0;
+            position: relative;
+            width: 100%;
+            margin-top: 20px;
+        }
+        #calendar {
+            margin-top: 20px;
+        }
+        .appointment {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .pending {
+            background-color: #fff3cd;
+        }
+        .approved {
+            background-color: #d4edda;
+        }
+        .appointment-buttons {
+            margin-top: 10px;
+        }
+        .approve-btn, .reject-btn {
+            margin-right: 5px;
+        }
+        .hidden {
+            display: none;
+        }
+        .centered {
+            text-align: center;
+            margin-top: 50px;
+        }
+        @media (max-width: 600px) {
+            .container {
+                width: 95%;
+                padding: 10px;
+            }
+            input, select {
+                font-size: 14px;
+                padding: 8px;
+            }
+            button {
+                font-size: 14px;
+                padding: 8px 12px;
+            }
+        }
+    </style>
+    <!-- Importando Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.12.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.12.1/firebase-database-compat.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Tutorías Escolares</h1>
+        <p>Programación de citas y pagos en línea</p>
+    </header>
+    <div class="container centered" id="selectionView">
+        <h2>Seleccione su tipo de usuario</h2>
+        <button id="clientButton" class="selectButton">Cliente</button>
+        <button id="adminButton" class="selectButton">Administrador</button>
+    </div>
+    <div class="container hidden" id="clientView">
+        <h2>Agendar una cita</h2>
+        <form id="bookingForm">
+            <label for="name">Nombre Completo:</label>
+            <input type="text" id="name" name="name" required>
+            
+            <label for="email">Correo Electrónico:</label>
+            <input type="email" id="email" name="email" required>
+            
+            <label for="subject">Materia:</label>
+            <select id="subject" name="subject" required>
+                <option value="alemán">Alemán</option>
+                <option value="matematicas">Matemáticas</option>
+                <option value="fisica">Física</option>
+            </select>
+            
+            <label for="date">Fecha:</label>
+            <input type="date" id="date" name="date" required>
+            
+            <label for="time">Hora:</label>
+            <input type="time" id="time" name="time" required>
+            
+            <label for="paymentMethod">Método de Pago:</label>
+            <input type="text" id="paymentMethod" name="paymentMethod" value="SINPE 71523564" readonly>
+            
+            <button type="submit">Agendar y Pagar</button>
+        </form>
+    </div>
+    <div class="container hidden" id="adminView">
+        <h2>Calendario de Citas</h2>
+        <div id="appointments"></div>
+    </div>
+    <footer>
+        <p>&copy; 2024 Matías Campos. Todos los derechos reservados.</p>
+    </footer>
+    <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBM2AcPYQPYsLFuk4VQOfffyD2j-hHwq9s",
+            authDomain: "tutorias-escolares.firebaseapp.com",
+            projectId: "tutorias-escolares",
+            storageBucket: "tutorias-escolares.appspot.com",
+            messagingSenderId: "47041582987",
+            appId: "1:47041582987:web:c02f8bfe37ecca592a018e",
+            measurementId: "G-FL8VNF689G"
+        };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        const adminPassword = 'H3morroid3'; // Cambia esto a una contraseña segura en producción
+
+        document.getElementById('bookingForm').addEventListener('submit', handleSubmit);
+
+        async function handleSubmit(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const subject = document.getElementById('subject').value;
+            const date = document.getElementById('date').value;
+            const time = document.getElementById('time').value;
+
+            const timeSlotTaken = await isTimeSlotTaken(date, time);
+            if (timeSlotTaken) {
+                alert('Esta fecha y hora ya están ocupadas. Por favor, seleccione otro horario.');
+                return;
+            }
+
+            const appointment = {
+                name: name,
+                email: email,
+                subject: subject,
+                date: date,
+                time: time,
+                status: 'pending'
+            };
+
+            await database.ref('appointments/pending').push(appointment);
+            alert('Su cita ha sido solicitada y está pendiente de aprobación.');
+            document.getElementById('bookingForm').reset();
+        }
+
+        async function isTimeSlotTaken(date, time) {
+            const snapshot = await database.ref('appointments/approved').get();
+            let taken = false;
+            snapshot.forEach(function(childSnapshot) {
+                const appointment = childSnapshot.val();
+                if (appointment.date === date && appointment.time === time) {
+                    taken = true;
+                }
+            });
+            return taken;
+        }
+
+        async function displayAppointments() {
+            const appointmentsDiv = document.getElementById('appointments');
+            appointmentsDiv.innerHTML = '';
+
+            const pendingSnapshot = await database.ref('appointments/pending').get();
+            pendingSnapshot.forEach(function(childSnapshot) {
+                const appointment = childSnapshot.val();
+                const appointmentDiv = document.createElement('div');
+                appointmentDiv.classList.add('appointment', 'pending');
+                appointmentDiv.innerHTML = `
+                    <p><strong>Nombre:</strong> ${appointment.name}</p>
+                    <p><strong>Correo Electrónico:</strong> ${appointment.email}</p>
+                    <p><strong>Materia:</strong> ${appointment.subject}</p>
+                    <p><strong>Fecha:</strong> ${appointment.date}</p>
+                    <p><strong>Hora:</strong> ${appointment.time}</p>
+                    <div class="appointment-buttons">
+                        <button class="approve-btn" onclick="approveAppointment('${childSnapshot.key}')">Aprobar</button>
+                        <button class="reject-btn" onclick="rejectAppointment('${childSnapshot.key}')">Rechazar</button>
+                    </div>
+                `;
+                appointmentsDiv.appendChild(appointmentDiv);
+            });
+
+            const approvedSnapshot = await database.ref('appointments/approved').get();
+            approvedSnapshot.forEach(function(childSnapshot) {
+                const appointment = childSnapshot.val();
+                const appointmentDiv = document.createElement('div');
+                appointmentDiv.classList.add('appointment', 'approved');
+                appointmentDiv.innerHTML = `
+                    <p><strong>Nombre:</strong> ${appointment.name}</p>
+                    <p><strong>Correo Electrónico:</strong> ${appointment.email}</p>
+                    <p><strong>Materia:</strong> ${appointment.subject}</p>
+                    <p><strong>Fecha:</strong> ${appointment.date}</p>
+                    <p><strong>Hora:</strong> ${appointment.time}</p>
+                `;
+                appointmentsDiv.appendChild(appointmentDiv);
+            });
+        }
+
+        async function approveAppointment(key) {
+            const appointmentRef = database.ref('appointments/pending/' + key);
+            const snapshot = await appointmentRef.get();
+            const appointment = snapshot.val();
+            appointment.status = 'approved';
+            await database.ref('appointments/approved').push(appointment);
+            await appointmentRef.remove();
+            sendApprovalEmail(appointment);
+            displayAppointments();
+        }
+
+        async function rejectAppointment(key) {
+            await database.ref('appointments/pending/' + key).remove();
+            displayAppointments();
+        }
+
+        function sendApprovalEmail(appointment) {
+            const subject = encodeURIComponent('Aprobación de cita');
+            const body = encodeURIComponent(`Estimado/a ${appointment.name},\n\nSu cita para la materia ${appointment.subject} el ${appointment.date} a las ${appointment.time} ha sido aprobada.\n\nSaludos,\nTutorías Escolares`);
+            const mailtoLink = `mailto:${appointment.email}?subject=${subject}&body=${body}`;
+            window.location.href = mailtoLink;
+        }
+
+        // Función para mostrar la vista del cliente
+        function showClientView() {
+            document.getElementById('selectionView').classList.add('hidden');
+            document.getElementById('clientView').classList.remove('hidden');
+        }
+
+        // Función para solicitar la contraseña de administrador y mostrar la vista del administrador si es correcta
+        function promptAdminLogin() {
+            const password = prompt('Por favor, ingrese la contraseña de administrador:');
+            if (password === adminPassword) {
+                document.getElementById('selectionView').classList.add('hidden');
+                document.getElementById('adminView').classList.remove('hidden');
+                displayAppointments(); // Mostrar las citas una vez que se accede como administrador
+            } else {
+                alert('Contraseña incorrecta.');
+            }
+        }
+
+        // Asignación de las funciones a los botones
+        function addButtonListeners() {
+            document.getElementById('clientButton').addEventListener('click', showClientView);
+            document.getElementById('adminButton').addEventListener('click', promptAdminLogin);
+        }
+
+        // Llamar a la función para agregar los listeners después de cargar la página
+        window.onload = addButtonListeners;
+
+        // Actualización periódica de citas
+        window.setInterval(() => {
+            displayAppointments();
+        }, 5000);
+    </script>
+</body>
+</html>
+
